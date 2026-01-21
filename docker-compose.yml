@@ -4,6 +4,4 @@ services:
   arbitrage-bot:
     build: .
     container_name: cardano-arbitrage-bot
-    # Use host network for lowest latency (Linux only)
-    # network_mode: host
-    
+    network_mode: host

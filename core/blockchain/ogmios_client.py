@@ -90,10 +90,13 @@ class OgmiosClient:
         """
         try:
             headers = self._get_headers()
-            self._ws = await websockets.connect(
-                self.url,
-                extra_headers=headers if headers else None,
-            )
+            if headers:
+                self._ws = await websockets.connect(
+                    self.url,
+                    additional_headers=headers,
+                )
+            else:
+                self._ws = await websockets.connect(self.url)
             logger.info(f"Connected to Ogmios at {self.url}")
             return True
         except ConnectionRefusedError:
