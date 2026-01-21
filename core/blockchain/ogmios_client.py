@@ -50,7 +50,11 @@ class OgmiosClient:
         """Connect to Ogmios. Returns True on success."""
         try:
             headers = self._get_headers()
-            self._ws = await websockets.connect(self.url, additional_headers=headers) if headers else await websockets.connect(self.url)
+            # Increase max_size to handle large UTxO responses (50MB)
+            connect_kwargs = {"max_size": 50 * 1024 * 1024}
+            if headers:
+                connect_kwargs["additional_headers"] = headers
+            self._ws = await websockets.connect(self.url, **connect_kwargs)
             logger.info(f"Connected to Ogmios at {self.url}")
             return True
         except ConnectionRefusedError:

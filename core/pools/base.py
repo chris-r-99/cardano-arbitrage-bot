@@ -31,11 +31,7 @@ class Pool(Protocol):
 
 @dataclass
 class BasePool(ABC):
-    """
-    Base class for DEX pools.
-    
-    Subclasses must set POOL_TYPE/FEE and implement pool_out()/pool_in().
-    """
+    """Base class for DEX pools."""
     POOL_TYPE: ClassVar[str] = ""
     FEE: ClassVar[Decimal] = Decimal("0")
     
@@ -89,9 +85,6 @@ class BasePool(ABC):
         if input_token == self.token_b:
             return self.reserve_b, self.reserve_a
         raise ValueError(f"Token {input_token} not in pool")
-    
-    def __repr__(self) -> str:
-        return f"{self.__class__.__name__}({self.token_a}/{self.token_b}, {self.reserve_a}/{self.reserve_b})"
 
 
 class PoolHandler(Protocol):
@@ -105,12 +98,7 @@ class PoolHandler(Protocol):
 
 
 class BasePoolHandler(ABC):
-    """
-    Base class for pool handlers.
-    
-    Subclasses must set POOL_TYPE/SCRIPT_HASHES/NFT_POLICIES and implement
-    parse_datum()/create_pool().
-    """
+    """Base class for pool handlers."""
     POOL_TYPE: ClassVar[str] = ""
     SCRIPT_HASHES: ClassVar[List[str]] = []
     NFT_POLICIES: ClassVar[List[str]] = []
