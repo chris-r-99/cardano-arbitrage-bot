@@ -1,12 +1,4 @@
-"""
-Ogmios WebSocket client for Cardano blockchain access
-
-Ogmios provides a WebSocket interface to cardano-node, enabling:
-- Chain synchronization
-- Ledger state queries
-- Transaction submission
-- Mempool monitoring
-"""
+"""Ogmios WebSocket client for Cardano blockchain access."""
 
 import asyncio
 import base64
@@ -23,49 +15,25 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class ChainTip:
-    """Represents the current chain tip"""
     slot: int
     block_hash: str
     block_height: Optional[int] = None
 
 
-@dataclass
-class ProtocolParameters:
-    """Subset of protocol parameters useful for transaction building"""
-    min_fee_coefficient: int
-    min_fee_constant: int
-    max_tx_size: int
-    # Add more as needed
-
-
 class OgmiosError(Exception):
-    """Base exception for Ogmios errors"""
-    pass
-
+    """Base exception for Ogmios errors."""
 
 class OgmiosConnectionError(OgmiosError):
-    """Connection-related errors"""
-    pass
-
+    """Connection-related errors."""
 
 class OgmiosQueryError(OgmiosError):
-    """Query-related errors"""
-    pass
+    """Query-related errors."""
 
 
 class OgmiosClient:
-    """
-    Async client for interacting with Ogmios WebSocket API
+    """Async client for Ogmios WebSocket API (v5 and v6)."""
     
-    Supports both Ogmios v5 (JSON-WSP) and v6 (JSON-RPC) protocols.
-    """
-    
-    def __init__(
-        self,
-        url: str = "ws://localhost:1337",
-        username: Optional[str] = None,
-        password: Optional[str] = None,
-    ):
+    def __init__(self, url: str = "ws://localhost:1337", username: Optional[str] = None, password: Optional[str] = None):
         self.url = url
         self.username = username
         self.password = password
@@ -73,30 +41,16 @@ class OgmiosClient:
         self._request_id = 0
     
     def _get_headers(self) -> Dict[str, str]:
-        """Generate authentication headers if credentials provided"""
-        headers = {}
         if self.username and self.password:
-            credentials = f"{self.username}:{self.password}"
-            encoded = base64.b64encode(credentials.encode()).decode()
-            headers["Authorization"] = f"Basic {encoded}"
-        return headers
+            encoded = base64.b64encode(f"{self.username}:{self.password}".encode()).decode()
+            return {"Authorization": f"Basic {encoded}"}
+        return {}
     
     async def connect(self) -> bool:
-        """
-        Establish WebSocket connection to Ogmios
-        
-        Returns:
-            True if connection successful, False otherwise
-        """
+        """Connect to Ogmios. Returns True on success."""
         try:
             headers = self._get_headers()
-            if headers:
-                self._ws = await websockets.connect(
-                    self.url,
-                    additional_headers=headers,
-                )
-            else:
-                self._ws = await websockets.connect(self.url)
+            self._ws = await websockets.connect(self.url, additional_headers=headers) if headers else await websockets.connect(self.url)
             logger.info(f"Connected to Ogmios at {self.url}")
             return True
         except ConnectionRefusedError:
@@ -107,154 +61,92 @@ class OgmiosClient:
             return False
     
     async def disconnect(self):
-        """Close the WebSocket connection"""
         if self._ws:
             await self._ws.close()
             self._ws = None
             logger.info("Disconnected from Ogmios")
     
+    @property
+    def is_connected(self) -> bool:
+        return self._ws is not None and self._ws.open
+    
     async def __aenter__(self):
-        """Async context manager entry"""
         if not await self.connect():
             raise OgmiosConnectionError(f"Failed to connect to {self.url}")
         return self
     
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """Async context manager exit"""
         await self.disconnect()
     
     def _next_request_id(self) -> int:
-        """Generate next request ID"""
         self._request_id += 1
         return self._request_id
     
-    async def _send_request(self, method: str, params: Optional[Dict] = None) -> Dict[str, Any]:
-        """
-        Send a request and wait for response
-        
-        Supports both JSON-WSP (Ogmios v5) and JSON-RPC (Ogmios v6) formats.
-        """
+    async def _send_request(self, method: str, params: Optional[Dict[str, Any]] = None, timeout: float = 30.0) -> Dict[str, Any]:
+        """Send JSON-RPC request and wait for response."""
         if not self._ws:
             raise OgmiosConnectionError("Not connected to Ogmios")
         
-        # Try JSON-RPC format first (Ogmios v6)
-        request_id = self._next_request_id()
-        request = {
-            "jsonrpc": "2.0",
-            "method": method,
-            "id": request_id,
-        }
+        request = {"jsonrpc": "2.0", "method": method, "id": self._next_request_id()}
         if params:
             request["params"] = params
         
-        await self._ws.send(json.dumps(request))
-        response_str = await self._ws.recv()
-        response = json.loads(response_str)
+        try:
+            await self._ws.send(json.dumps(request))
+            response = json.loads(await asyncio.wait_for(self._ws.recv(), timeout=timeout))
+        except asyncio.TimeoutError:
+            raise OgmiosQueryError(f"Request timed out after {timeout}s: {method}")
+        except Exception as e:
+            raise OgmiosQueryError(f"Request failed: {e}")
         
-        # Handle JSON-RPC response
         if "result" in response:
             return response["result"]
-        elif "error" in response:
-            raise OgmiosQueryError(f"Ogmios error: {response['error']}")
-        
-        # Might be JSON-WSP format, return as-is
+        if "error" in response:
+            err = response["error"]
+            raise OgmiosQueryError(f"Ogmios error: {err.get('message', err) if isinstance(err, dict) else err}")
         return response
     
     async def get_chain_tip(self) -> ChainTip:
-        """
-        Query the current chain tip
-        
-        Returns:
-            ChainTip with slot, block hash, and optionally block height
-        """
-        # Try different method names for compatibility
-        methods = [
-            "queryLedgerState/tip",  # Ogmios v5
-            "queryNetwork/tip",       # Alternative
-        ]
-        
-        for method in methods:
+        """Query current chain tip."""
+        for method in ["queryLedgerState/tip", "queryNetwork/tip"]:
             try:
-                result = await self._send_request(method)
-                
-                # Parse response (format varies by Ogmios version)
-                if isinstance(result, dict):
-                    slot = result.get("slot", result.get("slotNo", 0))
-                    block_hash = result.get("id", result.get("hash", result.get("headerHash", "")))
-                    block_height = result.get("height", result.get("blockNo"))
-                    
+                r = await self._send_request(method)
+                if isinstance(r, dict):
                     return ChainTip(
-                        slot=slot,
-                        block_hash=block_hash,
-                        block_height=block_height,
+                        slot=r.get("slot", r.get("slotNo", 0)),
+                        block_hash=r.get("id", r.get("hash", r.get("headerHash", ""))),
+                        block_height=r.get("height", r.get("blockNo")),
                     )
             except OgmiosQueryError:
                 continue
-        
-        raise OgmiosQueryError("Failed to query chain tip with any known method")
+        raise OgmiosQueryError("Failed to query chain tip")
     
     async def get_current_epoch(self) -> int:
-        """Query current epoch number"""
         result = await self._send_request("queryLedgerState/epoch")
         return result if isinstance(result, int) else result.get("epoch", 0)
     
     async def get_protocol_parameters(self) -> Dict[str, Any]:
-        """Query current protocol parameters"""
         return await self._send_request("queryLedgerState/protocolParameters")
     
     async def get_utxos_by_address(self, address: str) -> List[Dict[str, Any]]:
-        """
-        Query UTxOs at a specific address
-        
-        Args:
-            address: Bech32 address to query
-            
-        Returns:
-            List of UTxO dictionaries
-        """
-        result = await self._send_request(
-            "queryLedgerState/utxo",
-            {"addresses": [address]}
-        )
+        result = await self._send_request("queryLedgerState/utxo", {"addresses": [address]})
+        return result if isinstance(result, list) else []
+    
+    async def get_utxos_by_addresses(self, addresses: List[str]) -> List[Dict[str, Any]]:
+        result = await self._send_request("queryLedgerState/utxo", {"addresses": addresses})
+        return result if isinstance(result, list) else []
+    
+    async def get_utxos_by_output_references(self, output_refs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        result = await self._send_request("queryLedgerState/utxo", {"outputReferences": output_refs})
         return result if isinstance(result, list) else []
     
     async def submit_transaction(self, tx_cbor: str) -> str:
-        """
-        Submit a signed transaction
-        
-        Args:
-            tx_cbor: Transaction CBOR hex string
-            
-        Returns:
-            Transaction hash if successful
-        """
-        result = await self._send_request(
-            "submitTransaction",
-            {"transaction": {"cbor": tx_cbor}}
-        )
+        result = await self._send_request("submitTransaction", {"transaction": {"cbor": tx_cbor}})
         return result.get("transaction", {}).get("id", "")
     
     async def health_check(self) -> Dict[str, Any]:
-        """
-        Perform a health check
-        
-        Returns:
-            Dict with connection status and chain info
-        """
         try:
             tip = await self.get_chain_tip()
-            return {
-                "status": "healthy",
-                "connected": True,
-                "chain_tip": {
-                    "slot": tip.slot,
-                    "block_hash": tip.block_hash,
-                    "block_height": tip.block_height,
-                }
-            }
+            return {"status": "healthy", "connected": True, "chain_tip": {"slot": tip.slot, "block_hash": tip.block_hash, "block_height": tip.block_height}}
         except Exception as e:
-            return {
-                "status": "unhealthy",
-                "connected": False,
-                "error": str(e),
-            }
+            return {"status": "unhealthy", "connected": False, "error": str(e)}

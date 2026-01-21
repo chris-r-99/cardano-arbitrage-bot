@@ -14,6 +14,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY config config
 COPY core core
 COPY main.py main.py
+COPY test_fetch.py test_fetch.py
 
 # Set ownership
 RUN chown -R 1000:1000 /app

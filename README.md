@@ -9,11 +9,13 @@ cardano-arbitrage-bot/
 ├── config/              # Configuration management
 │   └── settings.py      # Edit settings directly here
 ├── core/                # Core modules
+│   ├── types.py         # Token, Asset types
 │   ├── arbitrage/       # Arbitrage detection & execution (TODO)
 │   ├── blockchain/      # Blockchain access (Ogmios client)
 │   ├── database/        # Database models & connection (TODO)
-│   ├── dex/             # DEX protocol implementations (TODO)
-│   └── models/          # Data models
+│   ├── fetching/        # Pool & order fetching
+│   ├── orders/          # Order parsers (Minswap V1, etc.)
+│   └── pools/           # Pool handlers (Minswap V1, etc.)
 ├── main.py              # Entry point / infrastructure test
 ├── Dockerfile
 ├── docker-compose.yml
@@ -94,12 +96,13 @@ Ogmios URL: ws://localhost:1337
 ## Development Roadmap
 
 - [x] Step 1: Infrastructure setup (Ogmios connection)
-- [ ] Step 2: Fetch pool data from one DEX
-- [ ] Step 3: Price calculation
-- [ ] Step 4: Multi-DEX price comparison
-- [ ] Step 5: Arbitrage detection
-- [ ] Step 6: Transaction building
-- [ ] Step 7: Execution
+- [x] Step 2: Pool & order data structures (Minswap V1)
+- [x] Step 3: Price calculation (constant product AMM)
+- [ ] Step 4: Chain data fetching implementation
+- [ ] Step 5: Multi-DEX support (Sundae, WingRiders, etc.)
+- [ ] Step 6: Arbitrage detection
+- [ ] Step 7: Transaction building
+- [ ] Step 8: Execution & monitoring
 
 ## Troubleshooting
 

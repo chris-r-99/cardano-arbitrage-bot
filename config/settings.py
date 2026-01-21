@@ -13,7 +13,7 @@ class Settings:
     # ===================
     # Ogmios Configuration
     # ===================
-    ogmios_url: str = "ws://localhost:1337"
+    ogmios_url: str = "ws://127.0.0.1:1337"
     ogmios_username: Optional[str] = None
     ogmios_password: Optional[str] = None
     

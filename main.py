@@ -85,10 +85,6 @@ async def test_infrastructure() -> bool:
         print("✅ All infrastructure tests passed!")
         print("=" * 60)
         print()
-        print("Next steps:")
-        print("  1. Run tests: pytest tests/test_ogmios.py -v")
-        print("  2. Add DEX support (copy from existing repos)")
-        print("  3. Implement pool fetching")
         print()
         
         return True
